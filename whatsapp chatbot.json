@@ -15,7 +15,7 @@
         -1664,
         1280
       ],
-      "id": "714e8331-be18-4709-96a0-d6e3848af203",
+      "id": "ID",
       "name": "WhatsApp Trigger",
       "webhookId": "WEBHOOK ID"
     },
@@ -33,16 +33,16 @@
         -160,
         1392
       ],
-      "id": "542c8177-b351-4fb2-9199-0a6da36efd1e",
+      "id": "ID",
       "name": "Send message",
-      "webhookId": "a33c925f-95e4-4abf-9b2b-121fd528ff6f"
+      "webhookId": "WEBHOOK ID"
     },
     {
       "parameters": {
         "operation": "appendOrUpdate",
         "documentId": {
           "__rl": true,
-          "value": "1Qw38FhNEZS6st_DQGt9hOCVHJFQiQvvzTAALmi_QHQk",
+          "value": "xxxx",
           "mode": "list",
           "cachedResultName": "sheet chatbot",
           "cachedResultUrl": "URL OF SHEET"
@@ -122,7 +122,7 @@
         },
         "options": {}
       },
-      "id": "87c8e8af-890a-4508-93e4-bee20b33763c",
+      "id": "ID",
       "name": "💾 Save to Elevyx CRM1",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.4,
@@ -136,7 +136,7 @@
         "mode": "defineBelow",
         "options": {}
       },
-      "id": "f0690366-2a7d-46fe-b23a-00f37f8219a4",
+      "id": "ID",
       "name": "📋 CRM Data Format1",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
@@ -173,7 +173,7 @@
         },
         "options": {}
       },
-      "id": "6edbcce8-eb55-4099-b054-7fb1d980cb31",
+      "id": "ID",
       "name": "🔥 Confirmed Inquiry?1",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
@@ -186,7 +186,7 @@
       "parameters": {
         "jsCode": "const whatsappData = $input.first().json;\nconst contacts = whatsappData.contacts || [{}];\nconst messages = whatsappData.messages || [{}];\n\n// Handle WhatsApp webhook structure variations\nconst message = messages[0]?.entry?.[0]?.changes?.[0]?.value?.messages?.[0] || \n                messages[0]?.changes?.[0]?.value?.messages?.[0] || \n                messages[0];\n\nconst contact = contacts[0] || messages[0]?.profile || {};\n\nif (!message || !message.text?.body) {\n  return [{ json: { error: 'No text message found', raw: whatsappData } }];\n}\n\nconst lead = {\n  phone: contact.wa_id || message.from || message.wa_id || '',\n  name: contact.profile?.name || contact.name || 'Client',\n  message: (message.text.body || '').toLowerCase().trim(),\n  raw_message: message.text.body || '',\n  message_id: message.id || '',\n  message_type: message.type || 'text',\n  source: 'Symphony Realtors WhatsApp',\n  timestamp: new Date().toISOString(),\n  conversation_id: `symphony_${contact.wa_id || message.from || Date.now()}`\n};\n\n// ✅ IMPROVED first message detection\nconst greetings = ['hi', 'hello', 'hey', 'start', 'help', 'symphony', 'realtor', 'home', 'house'];\nlead.is_first_message = !lead.raw_message || \n                       !lead.raw_message.trim() || \n                       greetings.some(g => lead.message.includes(g)) ||\n                       lead.message.length < 3;\n\nreturn [{ json: lead }];\n"
       },
-      "id": "14df705e-60a9-4b9e-bd78-b5ad39a872b6",
+      "id": "ID",
       "name": "📊 Parse WhatsApp Data1",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -199,7 +199,7 @@
       "parameters": {
         "jsCode": "const geminiResp = $input.first().json;\nconst lead = $input.all()[0].json;\n\nlet response = {\n  reply: lead.is_first_message ? \n    \"Welcome to Symphony Realtors 🏠\\nHow can I help find your dream home?\\n\\n* 🔑 View Properties\\n* ℹ️ FAQ\\n* 📅 Book Viewing\" :\n    \"What's your name please?\",\n  lead_score: 30,\n  status: 'WARM',\n  intent: 'inquiry',\n  property_name: null,\n  next_action: 'collect_name'\n};\n\n// Try parse JSON from multiple paths\nconst texts = [\n  geminiResp.content,\n  geminiResp.data?.candidates?.[0]?.content?.parts?.[0]?.text\n].find(t => t);\n\nif (texts) {\n  try {\n    response = JSON.parse(texts);\n  } catch(e) {\n    response.reply = texts.trim();\n  }\n}\n\nreturn [{ json: {\n  ...lead,\n  reply: response.reply || 'Thanks!',\n  lead_score: Math.max(0, Math.min(100, response.lead_score || 30)),\n  status: response.status || 'WARM',\n  intent: response.intent || 'inquiry',\n  property_name: response.property_name || null,\n  next_action: response.next_action || 'collect_name',\n  phone_formatted: (lead.phone || '').replace(/[^0-9+]/g, ''),\n  office_contact: '+95 1224567890',\n  company: 'Symphony Realtors'\n}}];\n"
       },
-      "id": "3caf8fa1-d879-4f62-aed8-4eed65874a90",
+      "id": "ID",
       "name": "🔧 Process Gemini Response",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -210,9 +210,9 @@
     },
     {
       "parameters": {
-        "jsCode": "const lead = $input.first().json;\nconst GEMINI_API_KEY = 'AIzaSyA1MZ2B4vL8-uZqYtdSUwkfJ3fhsaFzPQU'; \nconst GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;\n\nconst prompt = `You are Symphony Realtors WhatsApp concierge. Warm, elite, professional.\n\nRULES:\n1. \"hi\" → \"Welcome to Symphony Realtors 🏠\\nHow can I help find your dream home?\\n\\n* 🔑 View Properties\\n* ℹ️ FAQ\\n* 📅 Book Viewing\"\n2. \"book\"/\"view\" → \"What's your name please?\"\n3. Name given → \"Apartments, villas, or specific property?\"\n4. Property → \"Preferred location?\"\n5. FAQ → Short answers only\n6. Cancel → \"Contact office: +95 1224567890\"\n\nClient: ${lead.name} (${lead.phone})\n${lead.is_first_message ? 'FIRST' : 'CONTINUED'} message: \"${lead.raw_message}\"\n\nJSON ONLY: {\"reply\":\"text\",\"lead_score\":50,\"status\":\"WARM\",\"intent\":\"inquiry\",\"property_name\":null,\"next_action\":\"collect_name\"}`;\n\ntry {\n  const response = await fetch(GEMINI_URL, {\n    method: 'POST',\n    headers: { 'Content-Type': 'application/json' },\n    body: JSON.stringify({\n      contents: [{ parts: [{ text: prompt }] }],\n      generationConfig: { temperature: 0.3, maxOutputTokens: 300, response_mime_type: 'application/json' }\n    })\n  });\n  \n  if (!response.ok) throw new Error(response.statusText);\n  const data = await response.json();\n  const content = data.candidates?.[0]?.content?.parts?.[0]?.text;\n  \n  return [{ json: { success: true, content, data } }];\n} catch(e) {\n  return [{ json: { \n    success: false,\n    fallback_reply: lead.is_first_message ? \n      \"Welcome to Symphony Realtors 🏠\\nHow can I help find your dream home?\\n\\n* 🔑 View Properties\\n* ℹ️ FAQ\\n* 📅 Book Viewing\" : \n      \"What's your name please?\",\n    lead \n  } }];\n}\n"
+        "jsCode": "const lead = $input.first().json;\nconst GEMINI_API_KEY = 'GEMINI API KEY'; \nconst GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;\n\nconst prompt = `You are Symphony Realtors WhatsApp concierge. Warm, elite, professional.\n\nRULES:\n1. \"hi\" → \"Welcome to Symphony Realtors 🏠\\nHow can I help find your dream home?\\n\\n* 🔑 View Properties\\n* ℹ️ FAQ\\n* 📅 Book Viewing\"\n2. \"book\"/\"view\" → \"What's your name please?\"\n3. Name given → \"Apartments, villas, or specific property?\"\n4. Property → \"Preferred location?\"\n5. FAQ → Short answers only\n6. Cancel → \"Contact office: +95 1224567890\"\n\nClient: ${lead.name} (${lead.phone})\n${lead.is_first_message ? 'FIRST' : 'CONTINUED'} message: \"${lead.raw_message}\"\n\nJSON ONLY: {\"reply\":\"text\",\"lead_score\":50,\"status\":\"WARM\",\"intent\":\"inquiry\",\"property_name\":null,\"next_action\":\"collect_name\"}`;\n\ntry {\n  const response = await fetch(GEMINI_URL, {\n    method: 'POST',\n    headers: { 'Content-Type': 'application/json' },\n    body: JSON.stringify({\n      contents: [{ parts: [{ text: prompt }] }],\n      generationConfig: { temperature: 0.3, maxOutputTokens: 300, response_mime_type: 'application/json' }\n    })\n  });\n  \n  if (!response.ok) throw new Error(response.statusText);\n  const data = await response.json();\n  const content = data.candidates?.[0]?.content?.parts?.[0]?.text;\n  \n  return [{ json: { success: true, content, data } }];\n} catch(e) {\n  return [{ json: { \n    success: false,\n    fallback_reply: lead.is_first_message ? \n      \"Welcome to Symphony Realtors 🏠\\nHow can I help find your dream home?\\n\\n* 🔑 View Properties\\n* ℹ️ FAQ\\n* 📅 Book Viewing\" : \n      \"What's your name please?\",\n    lead \n  } }];\n}\n"
       },
-      "id": "c9fa8c82-989b-46bd-bb84-90f78a7085dd",
+      "id": "ID",
       "name": "🏠 Gemini AI Assistant",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -311,6 +311,7 @@
   "pinData": {},
   "meta": {
     "templateCredsSetupCompleted": true,
-    "instanceId": "dc7f6b9584b55b3a65cb372eb626cf3c95f1b840026c5f55a79dd5da4890c1ff"
+    "instanceId": "INSTANCE ID"
   }
+
 }
