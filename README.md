@@ -1,0 +1,1 @@
+provides a workflow automation with n8n for small scale businesses to verify leads and create a google sheet with details of the client and segregate based on scores generated with ai based on the convo
