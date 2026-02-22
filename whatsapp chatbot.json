@@ -1,65 +1,156 @@
 {
+  "name": "Elevyx Agency — WhatsApp AI Lead Qualifier v2",
   "nodes": [
     {
       "parameters": {
-        "updates": [
-          "messages"
-        ],
+        "updates": ["messages"],
         "options": {
           "messageStatusUpdates": []
         }
       },
       "type": "n8n-nodes-base.whatsAppTrigger",
       "typeVersion": 1,
-      "position": [
-        -1664,
-        1280
-      ],
-      "id": "ID",
+      "position": [-1664, 1264],
+      "id": "714e8331-be18-4709-96a0-d6e3848af203",
       "name": "WhatsApp Trigger",
-      "webhookId": "WEBHOOK ID"
+      "webhookId": "d6327474-305d-48d1-a71c-a722cb8a57ab"
     },
     {
       "parameters": {
-        "operation": "send",
-        "phoneNumberId": "1107173189136768",
-        "recipientPhoneNumber": "RECIPIENT PHONE NUMBER",
-        "textBody": "={{ $json.reply }}",
-        "additionalFields": {}
+        "jsCode": "const whatsappData = $input.first().json;\n\n// Support both direct trigger format and nested webhook\nconst messages = whatsappData.messages || [];\nconst contacts = whatsappData.contacts || [];\n\nconst message = messages[0] || {};\nconst contact = contacts[0] || {};\n\nif (!message?.text?.body) {\n  return [{ json: { error: 'No text message', raw: whatsappData } }];\n}\n\nconst rawMsg = message.text.body || '';\nconst lowerMsg = rawMsg.toLowerCase().trim();\n\n// Detect if this is a greeting / first message\nconst greetingWords = ['hi', 'hello', 'hey', 'start', 'help', 'elevyx', 'agency', 'services', 'pricing'];\nconst isFirst = lowerMsg.length < 4 || greetingWords.some(g => lowerMsg.includes(g));\n\nreturn [{ json: {\n  phone: contact.wa_id || message.from || '',\n  name: contact.profile?.name || 'Prospect',\n  raw_message: rawMsg,\n  message: lowerMsg,\n  message_id: message.id || '',\n  is_first_message: isFirst,\n  timestamp: new Date().toISOString(),\n  source: 'Elevyx WhatsApp Bot'\n}}];\n"
       },
-      "type": "n8n-nodes-base.whatsApp",
-      "typeVersion": 1.1,
-      "position": [
-        -160,
-        1392
-      ],
-      "id": "ID",
-      "name": "Send message",
-      "webhookId": "WEBHOOK ID"
+      "id": "14df705e-60a9-4b9e-bd78-b5ad39a872b6",
+      "name": "📊 Parse WhatsApp Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-1440, 1264]
+    },
+    {
+      "parameters": {
+        "jsCode": "const lead = $input.first().json;\n\nif (lead.error) {\n  return [{ json: { success: false, content: null, lead } }];\n}\n\nconst GEMINI_API_KEY = 'GOOGLE GEMINI API KEY';\nconst GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;\n\nconst systemPrompt = `You are Lexi, the AI assistant for Elevyx Agency — a premium digital marketing and web development agency.\n\nAbout Elevyx Agency:\n- Custom Web Design & Development\n- SEO & Content Marketing\n- Google Ads & Meta Ads Management\n- Social Media Management\n- Brand Identity & Logo Design\n- E-commerce (Shopify, WooCommerce)\n- Mobile App Development\n- Typical project budgets: $500 – $50,000+\n\nYOUR GOAL: Qualify whether this person is a real potential client or not.\n\nCONVERSATION FLOW:\n1. First message → Warm welcome, ask what brings them here\n2. They describe need → Ask about their business / project\n3. Business confirmed → Ask timeline\n4. Timeline given → Ask budget range (softly: \"What kind of investment are you looking at?\")\n5. Budget given → Ask if they're the decision maker\n6. All info gathered → Classify and close\n\nQUALIFICATION RULES:\n- VALID lead: Has a real business + specific need + some budget awareness + decision-making power\n- NOT_VALID: Student, competitor research, $0 budget, no real project, just curious\n- PENDING: Still gathering info\n\nSCORING (0–100):\n- Has real business: +25\n- Specific service need: +20\n- Mentions budget (any amount): +20\n- Has timeline: +15\n- Is decision maker: +20\n- Vague/no project: -30\n- Explicitly testing bot: -50\n\nWHEN VALID (score ≥ 70): Say \"Perfect! Our specialist will reach out within a few hours with a tailored proposal. In the meantime, explore our work at elevyx.agency 🚀\"\nWHEN NOT_VALID (score < 30 and confirmed): Say \"No worries! Feel free to reach us when you're ready at elevyx.agency 😊\"\n\nSTYLE:\n- Warm, human, professional — NOT robotic\n- Max 3 sentences per reply\n- ONE question at a time\n- 1 emoji max per message\n- NEVER mention you're an AI\n- NEVER discuss exact pricing (say \"our specialist will share a custom quote\")\n\nClient name: ${lead.name}\nClient phone: ${lead.phone}\nMessage type: ${lead.is_first_message ? 'FIRST MESSAGE' : 'CONTINUED CONVERSATION'}\nClient said: \"${lead.raw_message}\"\n\nRespond ONLY as valid JSON:\n{\n  \"reply\": \"your response to the client\",\n  \"lead_score\": 0-100,\n  \"status\": \"COLD|WARM|HOT|VALID|NOT_VALID\",\n  \"intent\": \"inquiry|booking|faq|cancel|unknown\",\n  \"service_interest\": \"web design|seo|ads|social media|branding|ecommerce|app|unknown\",\n  \"budget_mentioned\": null or \"string value\",\n  \"next_action\": \"collect_name|collect_service|collect_budget|collect_timeline|collect_decision|handoff|close\"\n}`;\n\ntry {\n  const resp = await fetch(GEMINI_URL, {\n    method: 'POST',\n    headers: { 'Content-Type': 'application/json' },\n    body: JSON.stringify({\n      contents: [{ parts: [{ text: systemPrompt }] }],\n      generationConfig: {\n        temperature: 0.4,\n        maxOutputTokens: 400,\n        response_mime_type: 'application/json'\n      }\n    })\n  });\n\n  if (!resp.ok) throw new Error(`Gemini error: ${resp.status} ${resp.statusText}`);\n  const data = await resp.json();\n  const content = data.candidates?.[0]?.content?.parts?.[0]?.text;\n  return [{ json: { success: true, content, lead } }];\n\n} catch(e) {\n  // Graceful fallback — bot still responds\n  const fallback = lead.is_first_message\n    ? `Hi ${lead.name}! 👋 Welcome to Elevyx Agency. We help businesses grow online through web design, SEO, ads, and more. What brings you here today?`\n    : `Thanks for your message! Could you tell me a bit more about what you're looking for?`;\n\n  return [{ json: {\n    success: false,\n    content: JSON.stringify({\n      reply: fallback,\n      lead_score: 25,\n      status: 'WARM',\n      intent: 'inquiry',\n      service_interest: 'unknown',\n      budget_mentioned: null,\n      next_action: 'collect_service'\n    }),\n    lead,\n    error: e.message\n  }}];\n}\n"
+      },
+      "id": "c9fa8c82-989b-46bd-bb84-90f78a7085dd",
+      "name": "🤖 Lexi — Gemini AI Brain",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-1216, 1264]
+    },
+    {
+      "parameters": {
+        "jsCode": "const geminiResp = $input.first().json;\nconst lead = geminiResp.lead || {};\n\nlet parsed = {\n  reply: `Hi ${lead.name || 'there'}! 👋 Welcome to Elevyx Agency. What can we help you with today?`,\n  lead_score: 25,\n  status: 'WARM',\n  intent: 'inquiry',\n  service_interest: 'unknown',\n  budget_mentioned: null,\n  next_action: 'collect_name'\n};\n\nif (geminiResp.content) {\n  try {\n    // Strip markdown fences if present\n    const clean = geminiResp.content\n      .replace(/```json/gi, '')\n      .replace(/```/g, '')\n      .trim();\n    parsed = { ...parsed, ...JSON.parse(clean) };\n  } catch(e) {\n    parsed.reply = geminiResp.content.trim().substring(0, 1000);\n  }\n}\n\nconst score = Math.max(0, Math.min(100, parsed.lead_score || 25));\n\n// Map status based on score if not already classified\nlet finalStatus = parsed.status || 'WARM';\nif (!['VALID', 'NOT_VALID'].includes(finalStatus)) {\n  if (score >= 80) finalStatus = 'HOT';\n  else if (score >= 50) finalStatus = 'WARM';\n  else finalStatus = 'COLD';\n}\n\nreturn [{ json: {\n  // Lead identity\n  phone: lead.phone || '',\n  name: lead.name || 'Unknown',\n  raw_message: lead.raw_message || '',\n  timestamp: lead.timestamp || new Date().toISOString(),\n\n  // AI decision fields\n  reply: parsed.reply || 'Thank you!',\n  lead_score: score,\n  status: finalStatus,\n  intent: parsed.intent || 'inquiry',\n  service_interest: parsed.service_interest || 'unknown',\n  budget_mentioned: parsed.budget_mentioned || null,\n  next_action: parsed.next_action || 'collect_info',\n\n  // Meta\n  gemini_success: geminiResp.success !== false,\n  source: 'Elevyx WhatsApp Bot'\n}}];\n"
+      },
+      "id": "3caf8fa1-d879-4f62-aed8-4eed65874a90",
+      "name": "🔧 Process Gemini Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-992, 1264]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ $json.intent }}",
+              "rightValue": "inquiry",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "leftValue": "={{ $json.lead_score }}",
+              "rightValue": 70,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and",
+          "options": {
+            "caseSensitive": false
+          }
+        },
+        "options": {}
+      },
+      "id": "6edbcce8-eb55-4099-b054-7fb1d980cb31",
+      "name": "🔥 Confirmed Lead?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-768, 1264]
+    },
+    {
+      "parameters": {
+        "mode": "defineBelow",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f1",
+              "name": "Customer Name",
+              "value": "={{ $json.name }}",
+              "type": "string"
+            },
+            {
+              "id": "f2",
+              "name": "property type",
+              "value": "={{ $json.service_interest }}",
+              "type": "string"
+            },
+            {
+              "id": "f3",
+              "name": "booking time",
+              "value": "={{ $json.timestamp }}",
+              "type": "string"
+            },
+            {
+              "id": "f4",
+              "name": "Status",
+              "value": "={{ $json.status }}",
+              "type": "string"
+            },
+            {
+              "id": "f5",
+              "name": "location",
+              "value": "={{ $json.phone }}",
+              "type": "string"
+            },
+            {
+              "id": "f6",
+              "name": "budget",
+              "value": "={{ $json.budget_mentioned || 'Not specified' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f0690366-2a7d-46fe-b23a-00f37f8219a4",
+      "name": "📋 CRM Data Format",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-544, 1184]
     },
     {
       "parameters": {
         "operation": "appendOrUpdate",
         "documentId": {
           "__rl": true,
-          "value": "xxxx",
+          "value": "1Qw38FhNEZS6st_DQGt9hOCVHJFQiQvvzTAALmi_QHQk",
           "mode": "list",
           "cachedResultName": "sheet chatbot",
-          "cachedResultUrl": "URL OF SHEET"
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Qw38FhNEZS6st_DQGt9hOCVHJFQiQvvzTAALmi_QHQk/edit?usp=drivesdk"
         },
         "sheetName": {
           "__rl": true,
           "value": 114746595,
           "mode": "list",
           "cachedResultName": "orders",
-          "cachedResultUrl": "URL OF SHEET"
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Qw38FhNEZS6st_DQGt9hOCVHJFQiQvvzTAALmi_QHQk/edit#gid=114746595"
         },
         "columns": {
           "mappingMode": "autoMapInputData",
           "value": {},
-          "matchingColumns": [
-            "Customer Name"
-          ],
+          "matchingColumns": ["Customer Name"],
           "schema": [
             {
               "id": "Customer Name",
@@ -122,104 +213,26 @@
         },
         "options": {}
       },
-      "id": "ID",
-      "name": "💾 Save to Elevyx CRM1",
+      "id": "87c8e8af-890a-4508-93e4-bee20b33763c",
+      "name": "💾 Save to Elevyx CRM",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.4,
-      "position": [
-        -176,
-        1184
-      ]
+      "position": [-320, 1264]
     },
     {
       "parameters": {
-        "mode": "defineBelow",
-        "options": {}
+        "operation": "send",
+        "phoneNumberId": "1107173189136768",
+        "recipientPhoneNumber": "={{ $('🔧 Process Gemini Response').item.json.phone.startsWith('+') ? $('🔧 Process Gemini Response').item.json.phone : '+' + $('🔧 Process Gemini Response').item.json.phone }}",
+        "textBody": "={{ $('🔧 Process Gemini Response').item.json.reply }}",
+        "additionalFields": {}
       },
-      "id": "ID",
-      "name": "📋 CRM Data Format1",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.4,
-      "position": [
-        -400,
-        1184
-      ]
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "conditions": [
-            {
-              "leftValue": "={{ $json.intent }}",
-              "rightValue": "inquiry",
-              "operator": {
-                "type": "string",
-                "operation": "equals"
-              }
-            },
-            {
-              "leftValue": "={{ $json.lead_score }}",
-              "rightValue": 70,
-              "operator": {
-                "type": "number",
-                "operation": "gte"
-              }
-            }
-          ],
-          "combinator": "and",
-          "options": {
-            "caseSensitive": false
-          }
-        },
-        "options": {}
-      },
-      "id": "ID",
-      "name": "🔥 Confirmed Inquiry?1",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [
-        -608,
-        1296
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const whatsappData = $input.first().json;\nconst contacts = whatsappData.contacts || [{}];\nconst messages = whatsappData.messages || [{}];\n\n// Handle WhatsApp webhook structure variations\nconst message = messages[0]?.entry?.[0]?.changes?.[0]?.value?.messages?.[0] || \n                messages[0]?.changes?.[0]?.value?.messages?.[0] || \n                messages[0];\n\nconst contact = contacts[0] || messages[0]?.profile || {};\n\nif (!message || !message.text?.body) {\n  return [{ json: { error: 'No text message found', raw: whatsappData } }];\n}\n\nconst lead = {\n  phone: contact.wa_id || message.from || message.wa_id || '',\n  name: contact.profile?.name || contact.name || 'Client',\n  message: (message.text.body || '').toLowerCase().trim(),\n  raw_message: message.text.body || '',\n  message_id: message.id || '',\n  message_type: message.type || 'text',\n  source: 'Symphony Realtors WhatsApp',\n  timestamp: new Date().toISOString(),\n  conversation_id: `symphony_${contact.wa_id || message.from || Date.now()}`\n};\n\n// ✅ IMPROVED first message detection\nconst greetings = ['hi', 'hello', 'hey', 'start', 'help', 'symphony', 'realtor', 'home', 'house'];\nlead.is_first_message = !lead.raw_message || \n                       !lead.raw_message.trim() || \n                       greetings.some(g => lead.message.includes(g)) ||\n                       lead.message.length < 3;\n\nreturn [{ json: lead }];\n"
-      },
-      "id": "ID",
-      "name": "📊 Parse WhatsApp Data1",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        -1280,
-        1296
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const geminiResp = $input.first().json;\nconst lead = $input.all()[0].json;\n\nlet response = {\n  reply: lead.is_first_message ? \n    \"Welcome to Symphony Realtors 🏠\\nHow can I help find your dream home?\\n\\n* 🔑 View Properties\\n* ℹ️ FAQ\\n* 📅 Book Viewing\" :\n    \"What's your name please?\",\n  lead_score: 30,\n  status: 'WARM',\n  intent: 'inquiry',\n  property_name: null,\n  next_action: 'collect_name'\n};\n\n// Try parse JSON from multiple paths\nconst texts = [\n  geminiResp.content,\n  geminiResp.data?.candidates?.[0]?.content?.parts?.[0]?.text\n].find(t => t);\n\nif (texts) {\n  try {\n    response = JSON.parse(texts);\n  } catch(e) {\n    response.reply = texts.trim();\n  }\n}\n\nreturn [{ json: {\n  ...lead,\n  reply: response.reply || 'Thanks!',\n  lead_score: Math.max(0, Math.min(100, response.lead_score || 30)),\n  status: response.status || 'WARM',\n  intent: response.intent || 'inquiry',\n  property_name: response.property_name || null,\n  next_action: response.next_action || 'collect_name',\n  phone_formatted: (lead.phone || '').replace(/[^0-9+]/g, ''),\n  office_contact: '+95 1224567890',\n  company: 'Symphony Realtors'\n}}];\n"
-      },
-      "id": "ID",
-      "name": "🔧 Process Gemini Response",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        -832,
-        1296
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const lead = $input.first().json;\nconst GEMINI_API_KEY = 'GEMINI API KEY'; \nconst GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;\n\nconst prompt = `You are Symphony Realtors WhatsApp concierge. Warm, elite, professional.\n\nRULES:\n1. \"hi\" → \"Welcome to Symphony Realtors 🏠\\nHow can I help find your dream home?\\n\\n* 🔑 View Properties\\n* ℹ️ FAQ\\n* 📅 Book Viewing\"\n2. \"book\"/\"view\" → \"What's your name please?\"\n3. Name given → \"Apartments, villas, or specific property?\"\n4. Property → \"Preferred location?\"\n5. FAQ → Short answers only\n6. Cancel → \"Contact office: +95 1224567890\"\n\nClient: ${lead.name} (${lead.phone})\n${lead.is_first_message ? 'FIRST' : 'CONTINUED'} message: \"${lead.raw_message}\"\n\nJSON ONLY: {\"reply\":\"text\",\"lead_score\":50,\"status\":\"WARM\",\"intent\":\"inquiry\",\"property_name\":null,\"next_action\":\"collect_name\"}`;\n\ntry {\n  const response = await fetch(GEMINI_URL, {\n    method: 'POST',\n    headers: { 'Content-Type': 'application/json' },\n    body: JSON.stringify({\n      contents: [{ parts: [{ text: prompt }] }],\n      generationConfig: { temperature: 0.3, maxOutputTokens: 300, response_mime_type: 'application/json' }\n    })\n  });\n  \n  if (!response.ok) throw new Error(response.statusText);\n  const data = await response.json();\n  const content = data.candidates?.[0]?.content?.parts?.[0]?.text;\n  \n  return [{ json: { success: true, content, data } }];\n} catch(e) {\n  return [{ json: { \n    success: false,\n    fallback_reply: lead.is_first_message ? \n      \"Welcome to Symphony Realtors 🏠\\nHow can I help find your dream home?\\n\\n* 🔑 View Properties\\n* ℹ️ FAQ\\n* 📅 Book Viewing\" : \n      \"What's your name please?\",\n    lead \n  } }];\n}\n"
-      },
-      "id": "ID",
-      "name": "🏠 Gemini AI Assistant",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        -1056,
-        1296
-      ]
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [-96, 1264],
+      "id": "542c8177-b351-4fb2-9199-0a6da36efd1e",
+      "name": "📤 Send WhatsApp Reply",
+      "webhookId": "a33c925f-95e4-4abf-9b2b-121fd528ff6f"
     }
   ],
   "connections": {
@@ -227,58 +240,29 @@
       "main": [
         [
           {
-            "node": "📊 Parse WhatsApp Data1",
+            "node": "📊 Parse WhatsApp Data",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "💾 Save to Elevyx CRM1": {
+    "📊 Parse WhatsApp Data": {
       "main": [
         [
           {
-            "node": "Send message",
+            "node": "🤖 Lexi — Gemini AI Brain",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "📋 CRM Data Format1": {
+    "🤖 Lexi — Gemini AI Brain": {
       "main": [
         [
           {
-            "node": "💾 Save to Elevyx CRM1",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "🔥 Confirmed Inquiry?1": {
-      "main": [
-        [
-          {
-            "node": "📋 CRM Data Format1",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "💾 Save to Elevyx CRM1",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "📊 Parse WhatsApp Data1": {
-      "main": [
-        [
-          {
-            "node": "🏠 Gemini AI Assistant",
+            "node": "🔧 Process Gemini Response",
             "type": "main",
             "index": 0
           }
@@ -289,18 +273,47 @@
       "main": [
         [
           {
-            "node": "🔥 Confirmed Inquiry?1",
+            "node": "🔥 Confirmed Lead?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "🏠 Gemini AI Assistant": {
+    "🔥 Confirmed Lead?": {
       "main": [
         [
           {
-            "node": "🔧 Process Gemini Response",
+            "node": "📋 CRM Data Format",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "💾 Save to Elevyx CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📋 CRM Data Format": {
+      "main": [
+        [
+          {
+            "node": "💾 Save to Elevyx CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "💾 Save to Elevyx CRM": {
+      "main": [
+        [
+          {
+            "node": "📤 Send WhatsApp Reply",
             "type": "main",
             "index": 0
           }
@@ -309,9 +322,13 @@
     }
   },
   "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
   "meta": {
     "templateCredsSetupCompleted": true,
-    "instanceId": "INSTANCE ID"
+    "instanceId": "dc7f6b9584b55b3a65cb372eb626cf3c95f1b840026c5f55a79dd5da4890c1ff"
   }
-
 }
